@@ -14,9 +14,17 @@
           <p class="eyebrow" id="today-label">Today</p>
           <h1>日常管理台</h1>
         </div>
-        <div class="score-card">
-          <span>完成率</span>
-          <strong id="completion-rate">0%</strong>
+        <div class="top-actions">
+          <div class="score-card">
+            <span>完成率</span>
+            <strong id="completion-rate">0%</strong>
+          </div>
+          <div class="storage-actions" aria-label="数据管理">
+            <button type="button" id="export-data">导出备份</button>
+            <button type="button" id="import-data">导入恢复</button>
+            <button type="button" id="reset-today">清空今日</button>
+            <input id="import-file" type="file" accept="application/json" hidden />
+          </div>
         </div>
       </section>
 
@@ -124,7 +132,36 @@
             </button>
           </header>
           <textarea id="daily-note" placeholder="临时想法、购物清单、今天要记住的事"></textarea>
-          <p class="status" id="save-status">已自动保存</p>
+          <p class="status" id="save-status">已自动保存到本机浏览器</p>
+        </article>
+
+        <article class="panel history-panel">
+          <header class="panel-header">
+            <div>
+              <p class="panel-kicker">History</p>
+              <h2>历史记录</h2>
+            </div>
+            <select id="history-date" aria-label="选择历史日期"></select>
+          </header>
+          <div class="history-summary" id="history-summary"></div>
+          <div class="history-detail">
+            <section>
+              <h3>待办</h3>
+              <ul class="mini-list" id="history-tasks"></ul>
+            </section>
+            <section>
+              <h3>习惯</h3>
+              <ul class="mini-list" id="history-habits"></ul>
+            </section>
+            <section>
+              <h3>收支</h3>
+              <ul class="mini-list" id="history-finances"></ul>
+            </section>
+            <section>
+              <h3>便签</h3>
+              <p class="history-note" id="history-note">没有便签</p>
+            </section>
+          </div>
         </article>
       </section>
     </main>

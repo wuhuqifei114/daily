@@ -27,6 +27,16 @@ const financeList = document.querySelector("#finance-list");
 const dailyNote = document.querySelector("#daily-note");
 const saveStatus = document.querySelector("#save-status");
 const copyNote = document.querySelector("#copy-note");
+const exportData = document.querySelector("#export-data");
+const importData = document.querySelector("#import-data");
+const importFile = document.querySelector("#import-file");
+const resetToday = document.querySelector("#reset-today");
+const historyDate = document.querySelector("#history-date");
+const historySummary = document.querySelector("#history-summary");
+const historyTasks = document.querySelector("#history-tasks");
+const historyHabits = document.querySelector("#history-habits");
+const historyFinances = document.querySelector("#history-finances");
+const historyNote = document.querySelector("#history-note");
 
 const defaultHabits = ["运动", "阅读", "早睡", "整理房间"];
 
@@ -63,7 +73,12 @@ function day() {
 
 function save() {
   localStorage.setItem(storageKey, JSON.stringify(state));
-  saveStatus.textContent = "已自动保存";
+  const time = new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date());
+  saveStatus.textContent = `已自动保存到本机浏览器 ${time}`;
 }
 
 function formatMoney(value) {
@@ -79,6 +94,27 @@ function setEmpty(list, text) {
   const item = document.createElement("li");
   item.className = "empty";
   item.textContent = text;
+  list.appendChild(item);
+}
+
+function getSortedDates() {
+  return Object.keys(state.days).sort((a, b) => b.localeCompare(a));
+}
+
+function formatDateLabel(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  const label = new Intl.DateTimeFormat("zh-CN", {
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(date);
+  return dateKey === todayKey ? `${label}（今天）` : label;
+}
+
+function appendMiniItem(list, text, done = false) {
+  const item = document.createElement("li");
+  item.textContent = text;
+  item.classList.toggle("is-done", done);
   list.appendChild(item);
 }
 
@@ -192,6 +228,69 @@ function renderSummary() {
   completionRate.textContent = `${rate}%`;
 }
 
+function renderHistorySelector() {
+  const selected = historyDate.value || todayKey;
+  const dates = getSortedDates();
+  historyDate.innerHTML = "";
+
+  dates.forEach((dateKey) => {
+    const option = document.createElement("option");
+    option.value = dateKey;
+    option.textContent = formatDateLabel(dateKey);
+    historyDate.appendChild(option);
+  });
+
+  historyDate.value = dates.includes(selected) ? selected : dates[0];
+}
+
+function renderHistory() {
+  renderHistorySelector();
+
+  const selectedDay = state.days[historyDate.value] || createDay();
+  const doneTasks = selectedDay.tasks.filter((task) => task.done).length;
+  const doneHabits = selectedDay.habits.filter((habit) => habit.done).length;
+  const balance = selectedDay.finances.reduce((sum, item) => sum + item.amount, 0);
+
+  historySummary.innerHTML = "";
+  [
+    ["待办", `${doneTasks}/${selectedDay.tasks.length}`],
+    ["习惯", `${doneHabits}/${selectedDay.habits.length}`],
+    ["喝水", `${selectedDay.water} 杯`],
+    ["结余", formatMoney(balance)],
+  ].forEach(([label, value]) => {
+    const card = document.createElement("div");
+    card.className = "history-stat";
+    card.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+    historySummary.appendChild(card);
+  });
+
+  historyTasks.innerHTML = "";
+  historyHabits.innerHTML = "";
+  historyFinances.innerHTML = "";
+
+  if (selectedDay.tasks.length) {
+    selectedDay.tasks.forEach((task) => appendMiniItem(historyTasks, task.title, task.done));
+  } else {
+    appendMiniItem(historyTasks, "没有待办");
+  }
+
+  if (selectedDay.habits.length) {
+    selectedDay.habits.forEach((habit) => appendMiniItem(historyHabits, habit.name, habit.done));
+  } else {
+    appendMiniItem(historyHabits, "没有习惯");
+  }
+
+  if (selectedDay.finances.length) {
+    selectedDay.finances.forEach((record) => {
+      appendMiniItem(historyFinances, `${record.name}：${formatMoney(record.amount)}`);
+    });
+  } else {
+    appendMiniItem(historyFinances, "没有收支");
+  }
+
+  historyNote.textContent = selectedDay.note.trim() || "没有便签";
+}
+
 function render() {
   todayLabel.textContent = new Intl.DateTimeFormat("zh-CN", {
     month: "long",
@@ -205,6 +304,49 @@ function render() {
   renderWater();
   renderFinances();
   renderSummary();
+  renderHistory();
+}
+
+function downloadBackup() {
+  const payload = {
+    app: "daily-dashboard",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: state,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `daily-dashboard-backup-${todayKey}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  saveStatus.textContent = "备份文件已导出";
+}
+
+function restoreBackup(file) {
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      const nextState = parsed.data || parsed;
+      if (!nextState.days || typeof nextState.days !== "object") {
+        throw new Error("Invalid backup");
+      }
+
+      state = nextState;
+      if (!state.days[todayKey]) state.days[todayKey] = createDay();
+      state.currentDate = todayKey;
+      save();
+      render();
+      saveStatus.textContent = "备份已导入并保存";
+    } catch {
+      saveStatus.textContent = "导入失败：备份文件格式不正确";
+    }
+  });
+  reader.readAsText(file);
 }
 
 function addTask(title) {
@@ -306,5 +448,29 @@ copyNote.addEventListener("click", async () => {
     saveStatus.textContent = "复制失败";
   }
 });
+
+exportData.addEventListener("click", downloadBackup);
+
+importData.addEventListener("click", () => {
+  importFile.click();
+});
+
+importFile.addEventListener("change", () => {
+  const [file] = importFile.files;
+  if (!file) return;
+  restoreBackup(file);
+  importFile.value = "";
+});
+
+resetToday.addEventListener("click", () => {
+  const confirmed = confirm("确定清空今天的待办、习惯、喝水、收支和便签吗？");
+  if (!confirmed) return;
+  state.days[todayKey] = createDay();
+  save();
+  render();
+  saveStatus.textContent = "今日数据已清空";
+});
+
+historyDate.addEventListener("change", renderHistory);
 
 render();
