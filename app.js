@@ -1,4 +1,81 @@
-const storageKey = "daily-dashboard-v1";
+﻿const storageKey = "daily-dashboard-v1";
+// ===== Toast 通知系统 =====
+function showToast(message, type) {
+  var container = document.querySelector(".toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.className = "toast-container";
+    document.body.appendChild(container);
+  }
+  var toast = document.createElement("div");
+  toast.className = "toast toast-" + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+  requestAnimationFrame(function () { toast.classList.add("show"); });
+  setTimeout(function () {
+    toast.classList.remove("show");
+    setTimeout(function () { toast.remove(); }, 300);
+  }, 3000);
+}
+
+// ===== 鼓励语逻辑 =====
+var shownEncourage = {
+  task50: false, task80: false, task100: false,
+  habitsAll: false, water8: false, perfect: false,
+};
+
+function checkEncouragement() {
+  var d = day();
+  var td = d.tasks.filter(function (t) { return t.done; }).length;
+  var tt = d.tasks.length;
+  var hd = d.habits.filter(function (h) { return h.done; }).length;
+  var ht = d.habits.length;
+  if (tt > 0) {
+    var r = td / tt;
+    if (r === 1 && !shownEncourage.task100) {
+      showToast("\U0001f389 太棒了！所有任务全部完成！", "celebration");
+      shownEncourage.task100 = true;
+    } else if (r >= 0.8 && !shownEncourage.task80 && td > 0) {
+      showToast("\U0001f44f 任务完成 80%，继续冲刺！", "success");
+      shownEncourage.task80 = true;
+    } else if (r >= 0.5 && !shownEncourage.task50 && td > 0) {
+      showToast("\U0001f4aa 完成一半了，继续保持！", "success");
+      shownEncourage.task50 = true;
+    }
+  }
+  if (ht > 0 && hd === ht && !shownEncourage.habitsAll) {
+    showToast("\U0001f31f 今日习惯全部打卡成功！", "celebration");
+    shownEncourage.habitsAll = true;
+  }
+  if (d.water >= 8 && !shownEncourage.water8) {
+    showToast("\U0001f4a7 饮水量达标！每天 8 杯水，健康好身体 \U0001f4aa", "success");
+    shownEncourage.water8 = true;
+  }
+  if (td === tt && hd === ht && d.water >= 8 && tt > 0 && ht > 0 && !shownEncourage.perfect) {
+    showToast("\U0001f3c6 完美的一天！任务、习惯、饮水全部达标！", "celebration");
+    shownEncourage.perfect = true;
+  }
+}
+
+// ===== 板块保存交互 =====
+function saveSection(btn) {
+  btn.classList.add("saving");
+  save();
+  var pn = (btn.closest(".panel").querySelector("h2") || {}).textContent || "\U6570\U636e";
+  showToast(pn + " \U5df2\U4fdd\U5b58 \U2714", "info");
+  setTimeout(function () { btn.classList.remove("saving"); }, 800);
+}
+
+// ===== 鼓励语持久化 =====
+function loadShownEncourage() {
+  try {
+    var saved = JSON.parse(localStorage.getItem("daily-encourage-" + todayKey));
+    if (saved) Object.assign(shownEncourage, saved);
+  } catch (e) {}
+}
+function saveShownEncourage() {
+  localStorage.setItem("daily-encourage-" + todayKey, JSON.stringify(shownEncourage));
+}
 const todayKey = new Date().toISOString().slice(0, 10);
 
 const todayLabel = document.querySelector("#today-label");
@@ -73,12 +150,14 @@ function day() {
 
 function save() {
   localStorage.setItem(storageKey, JSON.stringify(state));
+  saveShownEncourage();
   const time = new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   }).format(new Date());
   saveStatus.textContent = `已自动保存到本机浏览器 ${time}`;
+  showToast("数据已自动保存 ✅", "info");
 }
 
 function formatMoney(value) {
@@ -116,6 +195,10 @@ function appendMiniItem(list, text, done = false) {
   item.textContent = text;
   item.classList.toggle("is-done", done);
   list.appendChild(item);
+}
+
+function setText(element, text) {
+  if (element) element.textContent = text;
 }
 
 function renderTasks() {
@@ -177,7 +260,7 @@ function renderWater() {
   const cups = day().water;
   const degrees = Math.min(cups, 8) / 8 * 360;
   waterNumber.textContent = cups;
-  waterCount.textContent = `${cups} 杯`;
+  setText(waterCount, `${cups} 杯`);
   waterRing.style.background = `conic-gradient(var(--blue) ${degrees}deg, #e5ecf0 ${degrees}deg)`;
 }
 
@@ -186,7 +269,7 @@ function renderFinances() {
   const total = items.reduce((sum, item) => sum + item.amount, 0);
   financeList.innerHTML = "";
   financeTotal.textContent = formatMoney(total);
-  balanceCount.textContent = formatMoney(total);
+  setText(balanceCount, formatMoney(total));
 
   if (!items.length) {
     setEmpty(financeList, "今天还没有收支记录");
@@ -223,9 +306,9 @@ function renderSummary() {
   const doneItems = doneTasks + doneHabits;
   const rate = totalItems ? Math.round((doneItems / totalItems) * 100) : 0;
 
-  taskCount.textContent = `${doneTasks}/${tasks.length}`;
-  habitCount.textContent = `${doneHabits}/${habits.length}`;
-  completionRate.textContent = `${rate}%`;
+  setText(taskCount, `${doneTasks}/${tasks.length}`);
+  setText(habitCount, `${doneHabits}/${habits.length}`);
+  setText(completionRate, `${rate}%`);
 }
 
 function renderHistorySelector() {
@@ -305,6 +388,7 @@ function render() {
   renderFinances();
   renderSummary();
   renderHistory();
+  checkEncouragement();
 }
 
 function downloadBackup() {
@@ -338,6 +422,8 @@ function restoreBackup(file) {
 
       state = nextState;
       if (!state.days[todayKey]) state.days[todayKey] = createDay();
+  // Reset encouragement flags
+  Object.keys(shownEncourage).forEach(function (k) { shownEncourage[k] = false; });
       state.currentDate = todayKey;
       save();
       render();
@@ -462,10 +548,21 @@ importFile.addEventListener("change", () => {
   importFile.value = "";
 });
 
+
+// ===== 保存按钮事件绑定 =====
+document.querySelectorAll(".save-btn").forEach(function (btn) {
+  btn.addEventListener("click", function () { saveSection(btn); });
+});
+
+// ===== 初始化加载鼓励语状态 =====
+loadShownEncourage();
+
 resetToday.addEventListener("click", () => {
   const confirmed = confirm("确定清空今天的待办、习惯、喝水、收支和便签吗？");
   if (!confirmed) return;
   state.days[todayKey] = createDay();
+  // Reset encouragement flags
+  Object.keys(shownEncourage).forEach(function (k) { shownEncourage[k] = false; });
   save();
   render();
   saveStatus.textContent = "今日数据已清空";
